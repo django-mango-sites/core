@@ -1,0 +1,12 @@
+boto3==1.16.42
+Django==3.1.4
+django-debug-toolbar==3.2
+django-redis==4.12.1
+django-solo==1.1.5
+django-storages==1.11
+gunicorn==20.0.4
+numpy==1.19.4
+Pillow==8.0.1
+psycopg2==2.8.6
+requests==2.25.1
+tqdm==4.54.1

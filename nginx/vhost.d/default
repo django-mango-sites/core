@@ -1,0 +1,9 @@
+location /static/ {
+  alias /home/app/staticfiles/;
+
+  access_log off;
+  log_not_found off;
+
+  add_header Cache-Control "max-age=2592000, public, must-revalidate";
+  expires 30d;
+}

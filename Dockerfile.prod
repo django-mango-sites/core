@@ -1,0 +1,63 @@
+############################################
+
+# pull builder image
+FROM python:3.9.0-buster as builder
+
+# set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# set work directory
+WORKDIR /usr/src/app
+
+# install app dependencies
+COPY ./requirements.txt .
+
+# update env
+RUN apt-get update
+
+# install and update pip
+RUN pip install --upgrade pip
+
+# install requirements as wheel
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
+
+
+############################################
+
+# pull web app image
+FROM python:3.9.0-buster
+
+# create dirs
+RUN mkdir /home/app
+RUN mkdir /home/app/logs
+RUN mkdir /home/app/staticfiles
+
+# copy all to app dir
+COPY . /home/app/
+
+# set app as work dir
+WORKDIR /home/app/
+
+# update env
+RUN apt-get update
+
+# install and update pip
+RUN pip install --upgrade pip
+
+# install dependencies
+COPY --from=builder /usr/src/app/wheels /wheels
+COPY --from=builder /usr/src/app/requirements.txt .
+RUN pip install --no-cache /wheels/*
+
+# create the app user
+RUN groupadd -g 1000 app && useradd -u 1000 -g app -s /bin/sh app
+
+# chown all the files to the app user
+RUN chown -R app:app .
+
+# change to the app user
+USER app
+
+# make wait-for-it.sh executable
+RUN chmod +x wait-for-it.sh

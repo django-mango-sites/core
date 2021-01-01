@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+    web:
+        build:
+            context: .
+            dockerfile: Dockerfile.prod
+        env_file: prod.env
+        environment:
+            - DJANGO_SECURE_SSL_REDIRECT=True
+            - DJANGO_SECURE_PROXY_SSL_HEADER_CHECK=True
+            - VIRTUAL_HOST=${DJANGO_ALLOWED_HOSTS?}
+            - VIRTUAL_PORT=8000
+            - LETSENCRYPT_HOST=${DJANGO_ALLOWED_HOSTS?}
+        command: bash -c "
+            /home/app/wait-for-it.sh db:5432 -t 0 &&
+            python manage.py migrate --noinput &&
+            python manage.py collectstatic --noinput &&
+            gunicorn config.wsgi:application --bind 0.0.0.0:8000
+            "
+        volumes:
+            - .:/home/app
+            - static_volume:/home/app/staticfiles/
+            - media_volume:/home/app/media/
+            - logs_volume:/home/app/logs/
+        networks:
+            web:
+                aliases:
+                    - web
+        expose:
+            - 8000
+        depends_on:
+            - db
+
+    db:
+        image: postgres:13.1-alpine
+        hostname: db
+        env_file: prod.env
+        environment:
+            - POSTGRES_DB=${DATABASE_NAME?}
+            - POSTGRES_USER=${DATABASE_USERNAME?}
+            - POSTGRES_PASSWORD=${DATABASE_PASSWORD?}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data/
+        networks:
+            - web
+        ports:
+            - 5432:5432
+
+    nginx-proxy:
+        container_name: nginx-proxy
+        build:
+            context: nginx/
+            dockerfile: Dockerfile.jwilder-nginx
+        restart: always
+        volumes:
+            - .:/home/app
+            - static_volume:/home/app/staticfiles/
+            - media_volume:/home/app/media/
+            - conf:/etc/nginx/conf.d
+            - vhost:/etc/nginx/vhost.d
+            - certs:/etc/nginx/certs:ro
+            - html:/usr/share/nginx/html
+            - dhparam:/etc/nginx/dhparam
+            - /var/run/docker.sock:/tmp/docker.sock:ro
+        networks:
+            - web
+        ports:
+            - 443:443
+            - 80:80
+        depends_on:
+            - web
+
+    nginx-proxy-letsencrypt:
+        image: jrcs/letsencrypt-nginx-proxy-companion
+        env_file: prod.env
+        environment:
+            - NGINX_PROXY_CONTAINER=nginx-proxy
+            - DEFAULT_EMAIL=${DJANGO_ADMIN_EMAIL?}
+        restart: always
+        volumes:
+            - conf:/etc/nginx/conf.d
+            - vhost:/etc/nginx/vhost.d
+            - certs:/etc/nginx/certs
+            - html:/usr/share/nginx/html
+            - dhparam:/etc/nginx/dhparam:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        depends_on:
+            - nginx-proxy
+
+    redis:
+        image: redis:6.0.9-alpine
+        restart: always
+        volumes:
+            - redis_data:/data
+        networks:
+            - web
+        expose:
+            - 6379
+
+networks:
+    web:
+
+volumes:
+    static_volume:
+    media_volume:
+    logs_volume:
+    postgres_data:
+    conf:
+    vhost:
+    certs:
+    html:
+    dhparam:
+    redis_data:
